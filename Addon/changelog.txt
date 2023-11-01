@@ -1,0 +1,12 @@
+# Document in progress
+# 231020.0 
+
+LOGGING
+* Added a standard function for identifying the current file and function for debugging
+    - Random number generator so it is easier to trace the instance of a function
+    -  
+* Added new logging level DEBUG, intended for debugging functions beyond INFO
+* 
+
+TAGS
+* 
