@@ -1,0 +1,34 @@
+{"Modules":[
+	{"Name":"Shared",
+	 "InstallLocation":"C:\\Temp\\Shared",
+	 "LogLocation":"C:\\Temp\\Logs",
+	 "Version":"221215.0",
+	 "Manifest":[
+		{"CopyFiles":
+			{"Destination":"$InstallLocation",
+			"From":".\\Shared\\*"
+			}
+		},
+		{"CreateRegKeys":[
+			{ "Keys":[
+				{"LogPath":"C:\\Temp\\Logs"},
+				{"SharedPath":"$InstallLocation"},
+				{"TestPath":"$InstallLocation"},
+				{"LogLevel":"Info"}
+			  ]
+			}
+		]}
+	  ]
+    },
+	{"Name":"WorkspaceOneAPI",
+	 "InstallLocation":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules\\WorkspaceOneAPI\\",
+	 "Version":"221215.0",
+	 "Manifest":[
+		{"CopyFiles":
+			{"From":".\\WorkspaceOneAPI\\*",
+			"Destination":"$InstallLocation"}
+		}
+	  ]
+    }
+  ]
+}	

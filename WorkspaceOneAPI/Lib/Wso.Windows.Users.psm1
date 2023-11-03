@@ -6,6 +6,41 @@ if(!$current_path){
 }
 
 
+Function Test-DeviceManagementSID{
+    $CommonKey ="HKLM:\SOFTWARE\AirWatchMDM\AppDeploymentAgent\Common\{00000000-0000-0000-0000-000000000000}"
+    $Commonvalue = Get-ItemProperty -Path $CommonKey -ErrorAction SilentlyContinue | Select-Object TargetedUserSID -ExpandProperty TargetUserSID -ErrorAction SilentlyContinue
+    $AccountIDKey ="HKLM:\SOFTWARE\AirWatchMDM\AppDeploymentAgent\Common\{00000000-0000-0000-0000-000000000000}"
+    $AccountIDvalue = Get-ItemProperty -Path $AccountIDKey -ErrorAction SilentlyContinue | Select-Object AccountID -ExpandProperty AccountID -ErrorAction SilentlyContinue
+   
+    $EnrollmentsKey = "HKLM:\SOFTWARE\Microsoft\Enrollments\"
+    $SIDkey = ($EnrollmentsKey + $AccountIDvalue)
+    $SIDvalue = Get-ItemProperty -Path $SIDkey -ErrorAction SilentlyContinue | Select-Object SID -ExpandProperty SID -ErrorAction SilentlyContinue
+    $UPNvalue = Get-ItemProperty -Path $SIDkey -ErrorAction UPN | Select-Object UPN -ExpandProperty UPN -ErrorAction SilentlyContinue
+}
+
+Function Set-DeviceManagementSID{
+    param([string]$UserSID, [string]$UserUPN)
+    #Set the HKLM:\SOFTWARE\AirWatchMDM\AppDeploymentAgent\Common\{00000000-0000-0000-0000-000000000000}.TargetedUserSID key to the CurrentUsers's SID
+    $CommonKey ="HKLM:\SOFTWARE\AirWatchMDM\AppDeploymentAgent\Common\{00000000-0000-0000-0000-000000000000}"
+    $Commonvalue = Get-ItemProperty -Path $CommonKey -ErrorAction SilentlyContinue | Select-Object TargetedUserSID -ExpandProperty TargetUserSID -ErrorAction SilentlyContinue
+    If($Commonvalue){
+        $RegistryResult=Set-ItemProperty -Path $CommonKey -name TargetedUserSID -Value $UserSID -Force
+    }
+            
+    $AccountIDKey ="HKLM:\SOFTWARE\AirWatchMDM\AppDeploymentAgent\Common\{00000000-0000-0000-0000-000000000000}"
+    $AccountIDvalue = Get-ItemProperty -Path $AccountIDKey -ErrorAction SilentlyContinue | Select-Object AccountID -ExpandProperty AccountID -ErrorAction SilentlyContinue
+    If($AccountIDvalue){
+        $EnrollmentsKey = "HKLM:\SOFTWARE\Microsoft\Enrollments\"
+        $SIDkey = ($EnrollmentsKey + $AccountIDvalue)
+        $SIDvalue = Get-ItemProperty -Path $SIDkey -ErrorAction SilentlyContinue | Select-Object SID -ExpandProperty SID -ErrorAction SilentlyContinue
+        $UPNvalue = Get-ItemProperty -Path $SIDkey -ErrorAction UPN | Select-Object UPN -ExpandProperty UPN -ErrorAction SilentlyContinue
+    }
+    if($SIDvalue) {
+        Set-ItemProperty $SIDkey -name SID -Value $UserSID
+        Set-ItemProperty $SIDkey -name UPN -Value $UserUPN
+    }
+} 
+
 
 <#
 .AUTHOR
@@ -152,8 +187,6 @@ Function Get-UsersInGroup{
     }
     return $UsersList;
 }
-
-
 
 
 function Get-UserSIDLookup{

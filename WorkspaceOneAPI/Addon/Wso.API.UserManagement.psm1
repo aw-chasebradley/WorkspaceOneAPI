@@ -31,7 +31,7 @@ $logLocation="$($LibPaths.LogPath)\$ModuleName.log"
 #ModuleFileName
 
 $SecurityRestriction="{'Ownership':'S','AuthType':1}"
-$RegResults=New-ItemProperty -Path $ModuleInstallPath -Name "SecurityRestrictions" -Value $SecurityRestriction -Force
+$RegResults=New-ItemProperty -Path $InstallPath -Name "SecurityRestrictions" -Value $SecurityRestriction -Force
 
 #Setting up Log Location
 $Script:LogLocation="$($LibPaths.LogPath)\$ModuleName.log"
@@ -114,7 +114,7 @@ Function Set-WSODeviceUser{
         $ProcInfo=GetLogPos -FileName $CurrentModuleFileName -FunctionName $MyInvocation.MyCommand 
     } Process{
         Try{
-            $MultiUserSecurityRestrictionsReg=Get-ItemProperty -Path $ModuleInstallPath -ErrorAction SilentlyContinue | Select-Object -Property "SecurityRestrictions" -ExpandProperty "SecurityRestrictions"
+            $MultiUserSecurityRestrictionsReg=Get-ItemProperty -Path $InstallPath -ErrorAction SilentlyContinue | Select-Object -Property "SecurityRestrictions" -ExpandProperty "SecurityRestrictions"
             If(!($MultiUserSecurityRestrictionsReg)){ Throw (New-CustomException "Error, unable to load multi-user device restriction settings") }
             $MultiUserSecurityRestrictions=ConvertFrom-Json $MultiUserSecurityRestrictionsReg
             #Get the current device

@@ -148,7 +148,16 @@ class WorkspaceOneApiSession{
     [PSCustomObject]InvokeSecureWebRequest([string]$Endpoint, [string]$Method="GET", $ApiVersion=1, $Data=""){
         $ProcInfo=GetLogPos -FileName $Script:Filename -ClassName ($this.GetType().Name) -FunctionName "InvokeSecureWebRequest"
 
-        $Endpoint = "$($this.Config.Server)/$Endpoint"
+        If($Endpoint -match "^api\/.*"){
+            $Endpoint = "$($this.Config.Server)/$Endpoint"
+        }ElseIf($Endpoint -match "^\/api\/.*"){
+            $Endpoint = "$($this.Config.Server)$Endpoint"
+        }ElseIf($Endpoint -like "$($this.Config.Server)/api/*"){
+            $Endpoint = $Endpoint
+        }Else{
+            Throw "Error, endpoint not formatted correctly.  Expecting 'api/module/endpoint'"
+        }
+
         Write-Log2 -Path $this.Log -ProcessInfo $ProcInfo -Message "BEGIN REQUEST '$Method $Endpoint'"  -Level Info
         $Content=$null
         Try
@@ -276,8 +285,9 @@ class WorkspaceOneApiSession{
             If($WebRequest.Content){
                 $ReturnObj = ConvertFrom-Json $WebRequest.Content; 
             }
-            
-            If(($ReturnObj.total -ne $null) -and ($ReturnObj.total -gt $ReturnObj.page_size)){
+
+
+            If((($ReturnObj.total -ne $null) -and ($ReturnObj.total -gt $ReturnObj.page_size))){              
                 $SmartObjectId=($ReturnObj | Get-Member -MemberType NoteProperty | Where Name -notin @("page", "page_size", "total","links") | Select Name).Name
                 $CurrentPageCount=$ReturnObj.PageSize - ($ReturnObj."$SmartObjectId" | Measure).Count;
                 $CurrentPage=$ReturnObj.Page;
@@ -292,9 +302,31 @@ class WorkspaceOneApiSession{
                     $CurrentPageCount=($ReturnObjPaged.PageSize-($ReturnObj."$SmartObjectId" | Measure).Count)  
                     $CurrentPage=$ReturnObj.Page      
                 }
+            }ElseIf(($ReturnObj.TotalResults -ne $null)){
+                $PagedObject=@{}
+                $PageSize=500
+                If($Endpoint -match "pagesize\=([0-9]{1,4})"){
+                    $PageSizeMatch=$Matches[1]
+                    [int]::TryParse($PageSizeMatch, [ref]$PageSize)
+                }
+                If($ReturnObj.TotalResults -gt $PageSize -and ($Endpoint -notmatch "page\=")){
+                    $PagedObject.Add(0, $ReturnObj)
+                    $TotalPages=($ReturnObj.TotalResults / $PageSize)
+                    $CurrentPage=1
+                    While($CurrentPage -lt $TotalPages){
+                        $Divider="?"
+                        If($Endpoint -match "([^?]*)\?") { $Divider="&" }
+                        $WebRequestPaged=$this.InvokeSecureWebRequest("$Endpoint$Divider`page=$($CurrentPage)", $Method, $ApiVersion, $Data)
+                        $ReturnObjPaged = ConvertFrom-Json $WebRequestPaged.Content;
+                        $PagedObject.Add($CurrentPage, $ReturnObjPaged)
+                        $CurrentPage++;
+                    }
+                    $ReturnObj=$PagedObject
+                }
+                
             }
             
-            
+             
             #This flag pushes the expiration timer for the deviceId cache for stale devices
             If($CurrentDeviceLookup){
                 $CacheResult=Update-LocalCacheEntry -Module "WorkspaceOneAPI" -EntryName "DeviceId" -Data @{"LastHttpResult"=200} -LastScanResult WSO_API_SUCCESS -Force -EncryptData
@@ -304,7 +336,7 @@ class WorkspaceOneApiSession{
         } Else{
             $ErrInfo="ERROR"
             If($WebRequest.StatusCode -in @(403,401)){
-                $CacheResult=Update-LocalCacheEntry -Module "WorkspaceOneAPI" -EntryName "AuthError" -Data @{"LastHttpResult"=$WebRequest.StatusCode;"Description"="$ErrInfo`::$($WebRequest.Content))"} -LastScanResult WSO_API_ERROR -Force -EncryptData
+                $CacheResult=Update-LocalCacheEntry -Module "WorkspaceOneAPI" -EntryName "AuthError" -Data @{"LastHttpResult"=$WebRequest.StatusCode;"Description"="$ErrInfo`::$($WebRequest.Content))"} -LastScanResult WSO_API_FAILED -Force -EncryptData
                 $ErrInfo="AUTHENTICATION ERROR"
             }ElseIf($WebRequest.StatusCode -in $(404)){
                 $ErrInfo="RESOURCE NOT FOUND"
@@ -510,10 +542,8 @@ Function Invoke-WorkspaceOneAPICommand{
         If(!$ApiSettings){
             Write-Log2 -Path $Script:WSOLogLocation -ProcessInfo $LogPos -Message "No API settings present" -Level Warn
             return
-        }
-        
+        }    
         $Result=[WorkspaceOneApiSession]::InvokeWorkspaceOneAPICommand($ApiSettings, $Endpoint, $Method, $ApiVersion, $Data)
-
         return $Result
     }End{
         Write-Log2 -Path $WSOLogLocation  -Message ($SeperatorBar -f "End $Method '$Endpoint'")
