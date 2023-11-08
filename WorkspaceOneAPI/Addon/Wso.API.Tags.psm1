@@ -260,7 +260,7 @@ Function Set-WSODeviceTag{
         $TagUpdateStatus=[ScanResult]::WSO_CACHE_NO_CHANGE;
         If($Result -eq $true){
             $NewCacheEntryMethod="AddTag"
-            If(($TagCacheEntry.Method -ne "AddTag") -or (0 -gt $TagCacheEntry.LastScanResult -le 10)){
+            If(($TagCacheEntry.Method -ne "AddTag") -or (0 -gt $TagCacheEntry.LastScanResult -ge 10)){
                 $TagUpdateStatus=Add-WSODeviceTag -TagId $TagId -ApiSettings $ApiSettings
             }                                       
         } ElseIf($Result -eq $false -and !($IsStatic)){                      

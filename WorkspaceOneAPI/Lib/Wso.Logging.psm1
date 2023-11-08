@@ -229,7 +229,7 @@ function Write-Log2
 
 
         $LogFile = (Get-ChildItem $Path)
-        # Check log file size
+        # Check log file size 
         $LogSize = ($LogFile).Length/1KB
         
 
@@ -264,6 +264,7 @@ Function Start-NewLogFile{
         return $true
     }
     $IsDebug=($Script:LogSettings.LogLevel["Value"] -eq "Debug")
+    #$IsDebug=Get-WorkspaceOneLogLevel -
     $LogFile = (Get-ChildItem $LogPath)
     $TempLogPath="$($LogFile.DirectoryName)\Wso.Logging.psm1"
     $FileName = $LogFile.BaseName

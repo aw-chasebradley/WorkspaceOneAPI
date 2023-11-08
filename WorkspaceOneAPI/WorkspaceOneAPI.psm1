@@ -430,7 +430,7 @@ function Test-WorkspaceOneAPILocalConfig{
     Hashtable of the API Settings.  Required KeyValues: Server, 
 #>
 function Write-WorkspaceOneAPILocalConfig{
-    param([Hashtable]$ApiSettings)
+    param([Hashtable]$ApiSettings,[string]$ConfigId="")
     #Format SSL thumbprint
     $ApiSettings['SslThumbprint'] = $ApiSettings['SslThumbprint'].Replace(" ","").ToLower()
 
@@ -441,14 +441,15 @@ function Write-WorkspaceOneAPILocalConfig{
         $ApiSettings.Remove('Password')
     }
     
-    $LocalConfigResult=Set-LocalCacheEntry -Module "WorkspaceOneAPI" -EntryName "Config" -Data $ApiSettings -EncryptData -Force -ExpirationHours 0
+    $LocalConfigResult=Set-LocalCacheEntry -Module "WorkspaceOneAPI" -EntryName "Config$ConfigId" -Data $ApiSettings -EncryptData -Force -ExpirationHours 0
     return $LocalConfigResult
 }
 
 function Read-WorkspaceOneAPILocalConfig{
+    param([string]$ConfigId="")
     $ProcInfo=GetLogPos -FileName $Script:Filename -FunctionName $MyInvocation.MyCommand.Name 
           
-    $ApiObj = Get-LocalCacheEntry -Module "WorkspaceOneAPI" -CacheName "" -EntryName "Config"
+    $ApiObj = Get-LocalCacheEntry -Module "WorkspaceOneAPI" -CacheName "" -EntryName "Config$ConfigId"
     If(!($ApiObj)){
         Throw "Unable to retrieve Local Workspace One API config."
     }
@@ -524,20 +525,16 @@ $SeperatorBar="================={0}==================="
 .OUTPUT
 #>
 Function Invoke-WorkspaceOneAPICommand{
-    param([string]$Endpoint, [string]$Method="GET", $ApiVersion=1, $Data, $ApiSettings, [switch]$UseLocal, [switch]$StartNewLog)
+    param([string]$Endpoint, [string]$Method="GET", $ApiVersion=1, $Data, $ApiSettings, [string]$ConfigId, [switch]$UseLocal, [switch]$StartNewLog)
     Begin{
         $ProcInfo=GetLogPos -FileName $Script:Filename -FunctionName $MyInvocation.MyCommand.Name 
         Write-Log2 -Path $WSOLogLocation  -Message ($SeperatorBar -f "Start $Method '$Endpoint'") -Level Info
         Write-Log2 -Path $WSOLogLocation -LogPosition $ProcInfo -Message "BEGIN Creating WorkspaceOneAPI command" -Level Info
-
-        If($StartNewLog){
-            Start-NewWorkspaceOneLog
-        }
     }Process{
         If($ApiSettings -and $UseLocal){
-            $WriteResults=Write-WorkspaceOneAPILocalConfig -ApiSettings $ApiSettings
+            $WriteResults=Write-WorkspaceOneAPILocalConfig -ApiSettings $ApiSettings -ConfigId $ConfigId
         } ElseIf(!$ApiSettings -and $UseLocal){
-            $ApiSettings=Read-WorkspaceOneAPILocalConfig
+            $ApiSettings=Read-WorkspaceOneAPILocalConfig -ConfigId $ConfigId
         }     
         If(!$ApiSettings){
             Write-Log2 -Path $Script:WSOLogLocation -ProcessInfo $LogPos -Message "No API settings present" -Level Warn

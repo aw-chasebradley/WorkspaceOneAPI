@@ -123,7 +123,7 @@ Function Set-WSODeviceUser{
             $CurrentUser = Get-CurrentLoggedonUser 
             If($CurrentUser.Username -eq $CurrentDevice.Username){
                 Write-Log2 -Path $Script:LogLocation -ProcessInfo $ProcInfo -Message "PROCESS Current logged on Windows user, '$($CurrentUser.Username)' matches WorkspaceOne UEM user for current device '$($CurrentDevice.Username)'"
-                return
+                return0
             }
 
             If($CurrentDevice.Ownership -ne $MultiUserSecurityRestrictions.Ownership){
@@ -141,7 +141,6 @@ Function Set-WSODeviceUser{
         } Catch{
             $err=$_.Exception.Message;
             Write-Log2 -Path $Script:LogLocation -ProcessInfo $ProcInfo -Message "END An error has occured, $err" -Level Error
-            
         }
     }
 }

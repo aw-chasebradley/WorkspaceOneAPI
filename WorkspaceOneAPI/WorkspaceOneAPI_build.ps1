@@ -4,9 +4,7 @@ $Modules=@{"WorkspaceOneApi"="$PSScriptRoot\WorkspaceOneAPI";
             "Wso.Cache"="$PSScriptRoot\Lib\Wso.Cache";
             "Wso.CommonLib"="$PSScriptRoot\Lib\Wso.CommonLib";
             "Wso.Logging"="$PSScriptRoot\Lib\Wso.Logging"
-
 }
-
 
 ForEach($ModuleName in $Modules.Keys){
     $ModulePath=$Modules[$ModuleName]
