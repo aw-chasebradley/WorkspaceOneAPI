@@ -6,16 +6,65 @@ if(!$current_path){
 }
 
 
-Function Test-DeviceManagementSID{
-    $CommonKey ="HKLM:\SOFTWARE\AirWatchMDM\AppDeploymentAgent\Common\{00000000-0000-0000-0000-000000000000}"
-    $Commonvalue = Get-ItemProperty -Path $CommonKey -ErrorAction SilentlyContinue | Select-Object TargetedUserSID -ExpandProperty TargetUserSID -ErrorAction SilentlyContinue
-    $AccountIDKey ="HKLM:\SOFTWARE\AirWatchMDM\AppDeploymentAgent\Common\{00000000-0000-0000-0000-000000000000}"
-    $AccountIDvalue = Get-ItemProperty -Path $AccountIDKey -ErrorAction SilentlyContinue | Select-Object AccountID -ExpandProperty AccountID -ErrorAction SilentlyContinue
+Function Set-LocalData{
+    #Authenticate current logged in user
+    [Windows.System.User]::GetDefault()
+    #[System.DirectoryServices.DirectoryEntry]::new()
+
+}
+
+Function Test-MSDeviceManagement{
+    #$CurrentUser=Get-CurrentLoggedonWindowsUser
+    $usernameLookup = Get-WMIObject -class Win32_ComputerSystem | select username;
+    if($usernameLookup -match "([^\\]*)\\(.*)"){
+        $UserProperty = @{"Username"=$Matches[2];"Domain"=$Matches[1];"FullName"=$Matches[0];"Upn"="$($Matches[2])@$($Matches[1])"}
+    } elseif($usernameLookup -match "([^@]*)@(.*)"){
+        $UserProperty = @{"Username"=$Matches[1];"Domain"=$Matches[2];"Fullname"=$Matches[0];"Upn"="$Fullname"};
+    } else{
+        Throw "Error, could not retrieve username."
+    }
+    $usernameLookup = New-Object -TypeName PSCustomObject -Property $UserProperty
+    $CurrentUserUpn=$usernameLookup.Upn
+    #$CurrentUserSID=Get-UserSIDLookup
+    $User = New-Object System.Security.Principal.NTAccount($usernameLookup.Username)
+    $CurrentUserSID = $User.Translate([System.Security.Principal.SecurityIdentifier]).value;
+    If(!($CurrentUserSID)){
+        Throw "Error, could not retrieve user SID."
+    }
    
-    $EnrollmentsKey = "HKLM:\SOFTWARE\Microsoft\Enrollments\"
-    $SIDkey = ($EnrollmentsKey + $AccountIDvalue)
-    $SIDvalue = Get-ItemProperty -Path $SIDkey -ErrorAction SilentlyContinue | Select-Object SID -ExpandProperty SID -ErrorAction SilentlyContinue
-    $UPNvalue = Get-ItemProperty -Path $SIDkey -ErrorAction UPN | Select-Object UPN -ExpandProperty UPN -ErrorAction SilentlyContinue
+    
+    $WorkspaceOneAppDeploymentPath ="HKLM:\SOFTWARE\AirWatchMDM\AppDeploymentAgent\Common\{00000000-0000-0000-0000-000000000000}"
+    $WorkspaceOneAppDeploymentKey=Get-ItemProperty -Path $WorkspaceOneAppDeploymentPath -ErrorAction SilentlyContinue
+    If(!$WorkspaceOneAppDeployment){
+        Throw "Error, SFD agent not installed correctly."
+    }
+
+    $AppDeployTargetUserSID = $WorkspaceOneAppDeploymentKey | Select-Object TargetedUserSID -ExpandProperty TargetUserSID -ErrorAction SilentlyContinue
+    $AppDeployAccountKey = $WorkspaceOneAppDeploymentKey | Select-Object AccountID -ExpandProperty AccountID -ErrorAction SilentlyContinue
+    If([string]::IsNullOrEmpty($AppDeployTargetUserSID) -or [string]::IsNullOrEmpty($AppDeployAccountKey)){
+        return $false
+    }Elseif(($AppDeployTargetUserSID -ne $CurrentUserSID)){
+        return $false
+    }
+    
+
+    $MSEnrollmentPath = "HKLM:\SOFTWARE\Microsoft\Enrollments\$AppDeployAccountKey"
+    $MSEnrollmentKey = Get-ItemProperty -Path $MSEnrollmentPath -ErrorAction SilentlyContinue
+    If(!($MSEnrollmentKey)){
+        Throw "Error, device is currently not enrolled correctly."
+    }
+
+    $MSEnrollmentSID = $MSEnrollmentKey | Select-Object SID -ExpandProperty SID -ErrorAction SilentlyContinue
+    $MSEnrollmentUPN = $MSEnrollmentKey | Select-Object UPN -ExpandProperty UPN -ErrorAction SilentlyContinue
+    If([string]::IsNullOrEmpty($MSEnrollmentSID) -or [string]::IsNullOrEmpty($MSEnrollmentUPN)){
+        Throw "Error, device did not complete MS registration."
+    }ElseIf(($MSEnrollmentUPN -ne $CurrentUserUpn) -or ($MSEnrollmentSID -ne $CurrentUserSID)){
+        #Example for resolving this mis-match
+        #Set-ItemProperty $SIDkey -name SID -Value $UserSID | Out-Null
+        #Set-ItemProperty $SIDkey -name UPN -Value $UserUPN | Out-Null
+        return $false
+    }
+    return $true
 }
 
 Function Set-DeviceManagementSID{
@@ -215,3 +264,50 @@ function Get-UserSIDLookup{
     
 }
 
+<#
+.AUTHOR
+cbradley@vmware.com
+.SYNOPSIS
+Gets the currently logged in Windows User
+.DESCRIPTION
+Provides two different built in methods for getting the currently logged in user.  The standard method uses Get-WMIObject to determine
+the logged in user.  This method is not compatible with users using remote log in.  In order to allow for remote log in support,
+you will need to copy the GetWin32User.cs file into the current directory or include it as part of the installation process.
+.OUTPUTS
+Returns a custom PS object that has the following attributes
+    Username - user1
+    Domain - domain.com
+    FullName - domain.com\user1 or user1@domain.com
+#>
+function Get-CurrentLoggedonWindowsUser{
+    #Check to see if GetWin32User.cs exists at the current location
+    If(Test-Path "$current_path\GetWin32User.cs"){
+        Try{
+            Unblock-File "$current_path\GetWin32User.cs"
+            if (-not ([Management.Automation.PSTypeName]'AWDeviceInventory.QueryUser').Type) {
+                        [string[]]$ReferencedAssemblies = 'System.Drawing', 'System.Windows.Forms', 'System.DirectoryServices'
+                        Add-Type -Path "$current_path\GetWin32User.cs" -ReferencedAssemblies $ReferencedAssemblies -IgnoreWarnings -ErrorAction 'Stop'
+            }
+            $usernameLookup = [AWDeviceInventory.QueryUser]::GetUserSessionInfo("$env:ComputerName");
+            $usernameLookup = $usernameLookup | where {$_.IsCurrentSession} | select @{N='Username';E={$_.NTAccount}};
+        } Catch {
+            
+        }
+    } 
+    #If Username lookup has not been processed, use Get-WMIOBject to return the user.
+    If(!($usernameLookup)){
+        $usernameLookup = Get-WMIObject -class Win32_ComputerSystem | select username;
+    }
+    if($usernameLookup){
+        $usernameLookup = $usernameLookup.username;
+    }
+    #Uses regex
+    if($usernameLookup -match "([^\\]*)\\(.*)"){
+        $usernameProp = @{"Username"=$Matches[2];"Domain"=$Matches[1];"FullName"=$Matches[0]}
+        $usernameLookup = New-Object -TypeName PSCustomObject -Property $usernameProp;
+    } elseif($usernameLookup -match "([^@]*)@(.*)"){
+        $usernameProp = @{"Username"=$Matches[1];"Domain"=$Matches[2];"Fullname"=$Matches[0]}
+        $usernameLookup = New-Object -TypeName PSCustomObject -Property $usernameProp;
+    }         
+    return $usernameLookup;
+}

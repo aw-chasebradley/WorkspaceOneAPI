@@ -23,11 +23,11 @@ Write-Log2 -Path $Script:LogFile -Message "BEGIN HubNotify Launch Script" -Proce
 Unblock-File "$PSScriptRoot\HubNotify.ContentBuilder.psm1";
 $module = Import-Module "$PSScriptRoot\HubNotify.ContentBuilder.psm1" -ErrorAction Stop -PassThru -Force;
 
-#Send-WorkspaceOneNotificationEx -UniqueId "WorkspaceOneTest" -Message $Message -Caption $Caption
+Send-WorkspaceOneNotificationEx -UniqueId "WorkspaceOneTest" -Message $Message -Caption $Caption
 
 Write-Log2 -Path $Script:LogFile -Message "END HubNotify Launch Script" -ProcessInfo "[HubNotify.LaunchScript]" -Level Debug
 
-#Import Uwp Notifcation Library
+<#Import Uwp Notifcation Library
 $Script:AssemblyName = Get-ChildItem -Path "$PSScriptRoot\bin\Microsoft.Toolkit.Uwp.Notifications.dll"
 if (-not ($AssemblyName.Name  -as [type])) {
     Unblock-File $AssemblyName.FullName
@@ -42,5 +42,5 @@ $ToastContentBuilder.AddHeader("Id","Workspace ONE Intellegent Hub",@())
 $ToastContentBuilder.AddText("Workspace Intellegent Hub reminder to delete the thing.")
 $ToastContentBuilder.SetProtocolActivation(".\Notepad.exe")
 $ToastContentBuilder.Show()
-
+#>
 

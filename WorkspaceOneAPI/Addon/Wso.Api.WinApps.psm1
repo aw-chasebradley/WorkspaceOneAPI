@@ -82,7 +82,7 @@ Function Get-WorkspaceOneApplicationMetadata{
             ($App | Add-Member -MemberType NoteProperty -Name "uuid" -Value $AppDetails.uuid) | Out-Null
             ($App | Add-Member -MemberType NoteProperty -Name "BuildVersion" -Value $AppDetails.BuildVersion) | Out-Null
             ($App | Add-Member -MemberType NoteProperty -Name "AppId" -Value $AppDetails.AppId) | Out-Null
-            ($App | Add-Member -MemberType NoteProperty -Name "AppId" -Value $AppDetails.AppId) | Out-Null
+            ($App | Add-Member -MemberType NoteProperty -Name "CategoryList" -Value $AppDetails.CategoryList) | Out-Null
             $AppStores+=@($App)
         }
     }
