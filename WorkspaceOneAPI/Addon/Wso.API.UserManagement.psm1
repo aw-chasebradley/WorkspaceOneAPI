@@ -62,7 +62,12 @@ Function Get-WsoOrganizationGroupByGroupId{
 
 Function Set-WsoDeviceOrganizationGroup{
     param($NewGroupId, $ApiSettings)
-    
+    $ChangeOgEndpoint = "/api/mdm/devices/{DeviceId}/commands/changeorganizationgroup/$NewGroupId";
+    $OgChangeResult = Invoke-WorkspaceOneAPICommand -Endpoint $ChangeOgEndpoint -Method "Put" -ApiSettings $ApiSettings -UseLocal:(!($ApiSettings))
+    If($OgChangeResult.OrganizationGroups){
+        return $OgChangeResult
+    }
+    return
 }
 
 

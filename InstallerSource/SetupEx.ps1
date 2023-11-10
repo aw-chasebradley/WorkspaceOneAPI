@@ -38,14 +38,17 @@ if($current_path -eq ""){
         $current_path=Split-Path -Path $envriontment_dir
     }
 } 
-
+$setup_manifest=""
 <#if($current_path -eq ""){
     $current_path="C:\Users\cbradley.DESKTOP-USB51NK\Desktop\ElevateUserPrivileges_Alpha_0.1"
 }#>
 
 if(Test-Path "$current_path\setup.manifest"){
     $setup_manifest_file = [IO.File]::ReadAllText($current_path + "\setup.manifest");
-    $setup_manifest = ConvertFrom-Json -InputObject $setup_manifest_file;
+    $setup_manifest = ConvertFrom-Json -InputObject $setup_manifest_file -ErrorAction Continue;
+    if(!($setup_manifest)){
+        Throw "An error has occured, loading setup.manifest."
+    }
     $INSTALL_FILES = $true;
 }
 
@@ -274,7 +277,7 @@ Function Invoke-Installation{
         $BaseModuleRegPath = "HKLM:\Software\AirWatch\Extensions";
         
         $ModuleRegPath = "$BaseModuleRegPath\$ModuleName";
-        If($ModuleName -eq "Shared"){
+        If($ModuleName -in @("Shared","GlobalSettings")){
             $ModuleRegPath = $BaseModuleRegPath
         }
         
@@ -282,12 +285,22 @@ Function Invoke-Installation{
         $ModuleSecurityLevel = $MyModule.SecureInstall;
 
         $Currentversion = $MyModule.Version;
+        If(!$CurrentVersion -and $MyModule.PrimaryModule){
+            If(Test-Path "$current_path`\$($MyModule.PrimaryModule).psd1"){
+                
+                $ModulePath="$current_path`\$($MyModule.PrimaryModule).psd1"
+                $Output=Import-LocalizedData -BaseDirectory ($ModulePath | Split-Path -Parent) -FileName ($ModulePath | Split-Path -Leaf) -BindingVariable PrimaryModuleImport
+                If($PrimaryModuleImport.ModuleVersion){
+                    $Currentversion=$PrimaryModuleImport.ModuleVersion.ToString()
+                }
+            }
+        }
         $ModuleVersionKey = "InstalledVersion"
         If(Test-Path $ModuleRegPath){
                 Write-Log2 -Message "WorkspaceOneExtensions::Setup::Existing install detected.  Checking version." -Path $Global:LogLocation -Level Info
                 $Previousversion = Get-ItemProperty -Path $ModuleRegPath | Select-Object "$ModuleVersionKey" -ExpandProperty "$ModuleVersionKey" -ErrorAction SilentlyContinue
                 Write-Log2 -Message "WorkspaceOneExtensions::Setup::Current installed version is: $Previousversion." -Path $Global:LogLocation -Level Info
-           
+                
                 If([System.Version]$Previousversion -ge [System.Version]$Currentversion){
                     Write-Log2 -Message "WorkspaceOneExtensions::Setup::$Previousversion is greater to or equal than the current version." -Path $Global:LogLocation -Level Warn                                               
                     If(!($Force.IsPresent)){
@@ -449,9 +462,12 @@ Function Invoke-Installation{
             }
             $i=$i+1
         }
-        
-        $NewModuleName=New-ItemProperty -Path $ModuleRegPath -Name "InstalledVersion" -Value $Currentversion -Force -WhatIf:$TestInstall;
-        $NewModuleVersion=New-ItemProperty -Path $ModuleRegPath -Name "InstalledPath" -Value $ModuleInstallPath -Force -WhatIf:$TestInstall;
+        If($CurrentVersion){
+            $NewModuleName=New-ItemProperty -Path $ModuleRegPath -Name "InstalledVersion" -Value $Currentversion -Force -WhatIf:$TestInstall;
+        }
+        If($ModuleInstallPath){
+            $NewModuleVersion=New-ItemProperty -Path $ModuleRegPath -Name "InstallLocation" -Value $ModuleInstallPath -Force -WhatIf:$TestInstall;
+        }
 
         $NewModuleName="$NewModuleName".Replace(";","$LOG_BREAK")
         $NewModuleVersion="$NewModuleVersion".Replace(";","$LOG_BREAK")

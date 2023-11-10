@@ -1,33 +1,34 @@
 {"Modules":[
-	{"Name":"Shared",
-	 "InstallLocation":"C:\\Temp\\Shared",
-	 "LogLocation":"C:\\Temp\\Logs",
-	 "Version":"221215.0",
-	 "Manifest":[
-		{"CopyFiles":
-			{"Destination":"$InstallLocation",
-			"From":".\\Shared\\*"
-			}
-		},
+	{"Name":"GlobalSettings",
+		"PrimaryModule":"\\WorkspaceOneAPI\\Lib\\Wso.CommonLib",
+		"Manifest":[
 		{"CreateRegKeys":[
 			{ "Keys":[
-				{"LogPath":"C:\\Temp\\Logs"},
-				{"SharedPath":"$InstallLocation"},
-				{"TestPath":"$InstallLocation"},
-				{"LogLevel":"Info"}
+				{"LogPath":"C:\\WS1\\Logs"},
+				{"SharedPath":"C:\\WS1\\WorkspaceOneAPI\\Lib"},
+				{"LogLevel":"Info"},
+				{"MaxLogSize":"2048"},
+				{"MaxLogHistory":"3"}
 			  ]
 			}
 		]}
 	  ]
     },
 	{"Name":"WorkspaceOneAPI",
-	 "InstallLocation":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules\\WorkspaceOneAPI\\",
-	 "Version":"221215.0",
+	 "InstallLocation":"C:\\WS1\\WorkspaceOneAPI\\",
+	 "PrimaryModule":"\\WorkspaceOneAPI\\WorkspaceOneAPI",
 	 "Manifest":[
 		{"CopyFiles":
-			{"From":".\\WorkspaceOneAPI\\*",
-			"Destination":"$InstallLocation"}
-		}
+			{"From":".\\WorkspaceOneAPI\\*","Destination":"$InstallLocation"}},
+		{"CopyFiles":	
+		{"From":".\\WorkspaceOneAPI\\Addon\\*",
+		"Destination":"$InstallLocation\\Addon"}},
+		{"CopyFiles":{"From":".\\WorkspaceOneAPI\\Lib\\*",
+		"Destination":"$InstallLocation\\Lib"}},
+		{"CopyFiles":{"From":".\\WorkspaceOneAPI\\Script\\*",
+		"Destination":"$InstallLocation\\Script"}},
+		{"CopyFiles":{"From":".\\WorkspaceOneAPIEngine\\*",
+		"Destination":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules\\WorkspaceOneAPIEngine\\"}}
 	  ]
     }
   ]

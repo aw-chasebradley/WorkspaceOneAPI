@@ -51,21 +51,21 @@ $RegKeys=@()
 $currently_installed_list=$currently_installed.Split(";")
 ForEach($module in $currently_installed_list){
     $ModulePath="$InstallPath"
-    If($module -ne "Shared"){
+    If($module -notin @("Shared","GlobalSettings")){
         $ModulePath="$InstallPath\$module"
-    }
-    $InstalledPath=""
-    If(Test-Path $ModulePath){
-        $InstalledPath=Get-ItemProperty -Path $ModulePath | Select-Object "InstalledPath" -ExpandProperty "InstalledPath" -ErrorAction SilentlyContinue
-        If((Test-Path $InstalledPath) -and ($InstalledPath -notlike "*Modules*")){
-           $InstallPathDirs += $InstalledPath
-           #Remove-Item -Path $myPath -Recurse -Force;
+        $InstalledPath=""
+        If(Test-Path $ModulePath){
+            $InstalledPath=Get-ItemProperty -Path $ModulePath | Select-Object "InstallLocation" -ExpandProperty "InstallLocation" -ErrorAction SilentlyContinue
+            If((Test-Path $InstalledPath) -and ($InstalledPath -notlike "*Modules*")){
+               $InstallPathDirs += $InstalledPath
+               Remove-Item -Path $InstalledPath -Recurse -Force;
            
-        }        
-        If($module -ne "Shared"){
-            $RegKeys += $ModulePath
+            }        
+            If($module -ne "Shared","GlobalSettings"){
+                $RegKeys += $ModulePath
+            }
+            Remove-Item -Path "$ModulePath" -Recurse -Force;
         }
-        #Remove-Item -Path "$ModulePath" -Recurse -Force;
     }
 }
 
@@ -73,3 +73,5 @@ $Tasks = (Get-ScheduledTask) | where {$_.TaskPath -eq "\AirWatch MDM\"}
 ForEach($Task in $Tasks){
     Unregister-ScheduledTask -TaskName $Task.TaskName -TaskPath $Task.TaskPath -Confirm:$false
 }
+
+#Remove-Item -Path $InstallPath -Force -Recurse
