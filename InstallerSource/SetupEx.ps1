@@ -39,9 +39,6 @@ if($current_path -eq ""){
     }
 } 
 $setup_manifest=""
-<#if($current_path -eq ""){
-    $current_path="C:\Users\cbradley.DESKTOP-USB51NK\Desktop\ElevateUserPrivileges_Alpha_0.1"
-}#>
 
 if(Test-Path "$current_path\setup.manifest"){
     $setup_manifest_file = [IO.File]::ReadAllText($current_path + "\setup.manifest");
@@ -58,7 +55,6 @@ $LOG_BREAK="`r`n`t`t`t`t`t"
 $Global:LogLocation="$current_path\Setup.log"
 echo "NEW INSTALLATION STARTING" > $LogLocation;
 $AccessPolicyPath = "";
-
 
 function Write-Log2{ #Wrapper function to made code easier to read;
     [CmdletBinding()]
@@ -186,7 +182,7 @@ Function Create-Paths{
 
     $CreatePath = $Path;
     If($CreatePath -match "\`$([^\\]*)"){
-    $CreatePath = $CreatePath.Replace($Matches[0],$PathInfo[$Matches[1]]);
+        $CreatePath = $CreatePath.Replace($Matches[0],$PathInfo[$Matches[1]]);
     }
     If($ManifestItem."$ManifestAction".Folder){
         $CreatePath = $CreatePath + "\" + $ManifestItem."$ManifestAction".Folder;
@@ -198,6 +194,59 @@ Function Create-Paths{
         }
     }
 }
+
+function Get-EncryptedFileData{
+    param([string]$Filename,[string]$KeyFile)
+    $Data=""    
+    If(!(Test-Path "$current_path\$KeyFile")){
+            Write-Log2 -Path $Global:LogLocation -Message "An error occurred opening config file: A key file was specified but does not exist at the specified location." -Level Error        
+            return $false
+    } Else{
+        Try{
+            $Key = Get-Content "$current_path\$KeyFile"
+            $FileContents = Get-Content "$current_path\$Filename" | ConvertTo-SecureString -Key $key
+            $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($FileContents)
+            $Data = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
+        }Catch{
+            $err=$_.Exception.Message;
+            Write-Log2 -Path $Global:LogLocation -Message "An error occurred opening config file: $err" -Level Error
+        }Finally{
+            Remove-Item -Path "$current_path\$Filename" -Force
+            Remove-Item -Path "$current_path\$KeyFile" -Force
+        }
+    }
+    return $Data
+}
+
+function New-EncryptedRegKeyFromFile{
+    param([string]$Filename,[string]$KeyFile,[string]$RegPath,[string]$RegKey)
+    If(!(Test-Path "$current_path\$Filename")){
+        Write-Log2 -Path $Global:LogLocation -Message "An error occurred opening config file: File does not exist  but does not exist at the specified location." -Level Error        
+        return $false
+    }
+    If($KeyFile){
+        Get-EncryptedFileData -Filename $Filename -KeyFile $KeyFile
+    }Else{
+        $Data=Get-Content $Filename
+    }
+    If(!($Data)){
+        Write-Log2 -Path $Global:LogLocation -Message "An error occurred opening config file: No data found at $current_path\$Filename." -Level Error  
+        return $false
+    }
+    Try{     
+        $secured = ConvertTo-SecureString -String $Data -AsPlainText -Force
+        $encrypted = ConvertFrom-SecureString -SecureString $secured
+        $RegWriteData = New-ItemProperty -Path $RegPath -Name $RegKey -Value $encrypted -Force
+        Remove-Item -Path "$current_path\$Filename" -Force
+    }Catch{
+        $err=$_.Exception.Message;
+        Write-Log2 -Path $Global:LogLocation -Message "An error occurred saving config file: $err" -Level Error
+        Remove-Item -Path "$current_path\$Filename" -Force  
+    }
+    Remove-Item -Path "$current_path\$Filename" -Force
+    return $true
+}
+
 
 function Create-Task{
     Param([string]$TaskPath, [string]$TaskName, [string]$PShellScript, [string]$PSCommand, [string]$Interval, [string]$TriggerType,[bool]$AutoStart=$true,[bool]$TestInstall,[string]$Arguments)
@@ -366,6 +415,12 @@ Function Invoke-Installation{
                     $DeleteFormatted = Get-InstallerPath -Path $DeleteFormatted -Dictionary $PathInfo
                     Remove-Item -Path $Delete -Force -WhatIf:$TestInstall;
                 }
+            } ElseIf ($ManifestAction -eq "ImportConfigFile"){
+               $FileName=$ManifestItem."$ManifestAction".FileName
+               $Key=$ManifestItem."$ManifestAction".Key
+               $RegKeyName=$ManifestItem."$ManifestAction".RegKey
+               $RegPath="$ModuleRegPath\$RegKeyPath"
+               New-EncryptedRegKeyFromFile -Filename $FileName -KeyFile $Key -RegPath $RegPath -RegKey $RegKeyName
             } ElseIf ($ManifestAction -eq "CreateAccessFile"){
                 $AccessInstallLocation = $ManifestItem."$ManifestAction".Location,
                 $AccessInstallLocation = Get-InstallerPath -Path $AccessInstallLocation -Dictionary $PathInfo

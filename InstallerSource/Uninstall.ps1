@@ -74,4 +74,4 @@ ForEach($Task in $Tasks){
     Unregister-ScheduledTask -TaskName $Task.TaskName -TaskPath $Task.TaskPath -Confirm:$false
 }
 
-#Remove-Item -Path $InstallPath -Force -Recurse
+Remove-Item -Path $InstallPath -Force

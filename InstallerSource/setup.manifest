@@ -28,7 +28,13 @@
 		{"CopyFiles":{"From":".\\WorkspaceOneAPI\\Script\\*",
 		"Destination":"$InstallLocation\\Script"}},
 		{"CopyFiles":{"From":".\\WorkspaceOneAPIEngine\\*",
-		"Destination":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules\\WorkspaceOneAPIEngine\\"}}
+		"Destination":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules\\WorkspaceOneAPIEngine\\"}},
+		{"ImportConfigFile":{
+				"Filename":"apisettings.config",
+				"Key":"AES.key",
+				"RegKey":"Config_#"
+			}
+		}
 	  ]
     }
   ]

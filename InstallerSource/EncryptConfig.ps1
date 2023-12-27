@@ -4,7 +4,7 @@ If(!($current_path)){
     return
 }
 $ApiSettings=@{'Server'="https://asXXXX.awmdm.com";
-            'Username'='user';
+            'Username'='username';
             'Password'='pass';
             'ApiKey'='ApiKey';
             'SslThumbprint'='6A874FA9CFD46EC6F0DAE0039D710B20196EDB75';
