@@ -36,6 +36,15 @@
 			}
 		}
 	  ]
-    }
+	},
+	{"Name":"Wso.API.UserManagement",
+		"InstallLocation":"C:\\WS1\\WorkspaceOneAPI\\Addon\\"
+	},
+	{"Name":"Wso.Api.Tags",
+		"InstallLocation":"C:\\WS1\\WorkspaceOneAPI\\Addon\\"
+	},
+	{"Name":"WorkspaceOneAPIEngine",
+		"InstallLocation":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\Modules\\WorkspaceOneAPIEngine\\"
+	}
   ]
 }	

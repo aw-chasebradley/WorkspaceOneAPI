@@ -4,7 +4,7 @@
 #>
 
 $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
-Write-Host -ForegroundColor White -Object "$($currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))" | Out-Null
+Write-Host -ForegroundColor White -Object "IsAdministrator`: $($currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))" | Out-Null
 If( !($currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) ) { return }
 Write-Host -ForegroundColor White -Object "Loading WorkspaceOneAPIEngine" | Out-Null
 $CurrentPath=$PSScriptRoot
@@ -29,19 +29,24 @@ If(!($WorkspaceOneModulePath)){
     }
 }
 
-If(!(Test-Path $ExtensionPath)){
-    $InstalledModules=Get-ChildItem -Path $ExtensionPath | Where PSChildName -notin @("Cache", "WorkspaceOneAPI") | Select Name, PSChildName
+If(Test-Path $ExtensionPath){
+    $InstalledModules=@(Get-ChildItem -Path $ExtensionPath | Where PSChildName -notin @("Cache", "WorkspaceOneAPI") | Select Name, PSChildName)
 }
 
 $ExportedFunctions=@()
 $ExportedAliai=@()
 
 If($InstalledModules){
-    For($Module -in $InstalledModules){
-        $ModuleInstallLocation=Get-ItemProperty -Path $Module.Name -ErrorAction SilentlyContinue | Select "InstallLocation" -ExpandProperty "InstallLocation" -ErrorAction SilentlyContinue
+    For($i=0;$i -lt $InstalledModules.Count;$i++){
+        $InstalledModule=$InstalledModules[$i]
+        #Write-Host -ForegroundColor White -Object "Module name: $($InstalledModule.Name)"
+        If($InstalledModule.PSChildName -eq "WorkspaceOneAPIEngine"){
+            continue;
+        }
+        $ModuleInstallLocation=Get-ItemProperty -Path "$ExtensionPath\$($InstalledModule.PSChildName)" -ErrorAction SilentlyContinue | Select "InstallLocation" -ExpandProperty "InstallLocation" -ErrorAction SilentlyContinue
         If($ModuleInstallLocation){
-            Unblock-File "$ModuleInstallLocation\$($Module.PSChildName).psm1"
-            $WSOModule=Import-Module "$($Module.PSChildName).psm1" -ErrorAction Stop -PassThru -Force;
+            Unblock-File "$ModuleInstallLocation\$($InstalledModule.PSChildName).psm1"
+            $WSOModule=Import-Module "$ModuleInstallLocation\$($InstalledModule.PSChildName).psm1" -ErrorAction Stop -PassThru -Force;
             $ExportedFunctions += $WSOModule.ExportedFunctions.Keys
             $ExportedAliai += $WSOModule.ExportedAliases.Keys
         }
@@ -56,4 +61,4 @@ $ExportedAliai += $WSOModule.ExportedAliases.Keys
 $ExportedFunctions=$ExportedFunctions | Get-Unique
 $ExportedAliai=$ExportedAliai | Get-Unique
 
-Export-ModuleMember -Function $ExportedFunctions -Alias $ExportedAliai
+#Export-ModuleMember -Function $ExportedFunctions -Alias $ExportedAliai

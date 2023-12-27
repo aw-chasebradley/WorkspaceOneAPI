@@ -1,11 +1,17 @@
 ﻿<############################################
 # File: SetupEx.ps1
-# Version: 2.0
+# Version: 2.25
+# Date: 2023-12-27
 # Author: Chase Bradley
-# Modified by: Phil Helmling 08 Aug 2019, add onUnlock Task Triggers condition for Create-Task - references "TriggerType":"onUnlock" in setup.manifest
 # Setup Shared Device Module
 
 Change Log
+2.2
+*Added support for encrypted config files for localized config use
+
+2.1
+*Fixed some registry key issues to standardize how modules get installed
+
 2.0
 General Fixes
 * Added significant logging overhaul
@@ -56,7 +62,7 @@ $Global:LogLocation="$current_path\Setup.log"
 echo "NEW INSTALLATION STARTING" > $LogLocation;
 $AccessPolicyPath = "";
 
-function Write-Log2{ #Wrapper function to made code easier to read;
+function Write-InstallerLog{ #Wrapper function to made code easier to read;
     [CmdletBinding()]
     Param
     (
@@ -199,7 +205,7 @@ function Get-EncryptedFileData{
     param([string]$Filename,[string]$KeyFile)
     $Data=""    
     If(!(Test-Path "$current_path\$KeyFile")){
-            Write-Log2 -Path $Global:LogLocation -Message "An error occurred opening config file: A key file was specified but does not exist at the specified location." -Level Error        
+            Write-InstallerLog -Path $Global:LogLocation -Message "An error occurred opening config file: A key file was specified but does not exist at the specified location." -Level Error        
             return $false
     } Else{
         Try{
@@ -209,7 +215,7 @@ function Get-EncryptedFileData{
             $Data = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
         }Catch{
             $err=$_.Exception.Message;
-            Write-Log2 -Path $Global:LogLocation -Message "An error occurred opening config file: $err" -Level Error
+            Write-InstallerLog -Path $Global:LogLocation -Message "An error occurred opening config file: $err" -Level Error
         }Finally{
             Remove-Item -Path "$current_path\$Filename" -Force
             Remove-Item -Path "$current_path\$KeyFile" -Force
@@ -221,29 +227,28 @@ function Get-EncryptedFileData{
 function New-EncryptedRegKeyFromFile{
     param([string]$Filename,[string]$KeyFile,[string]$RegPath,[string]$RegKey)
     If(!(Test-Path "$current_path\$Filename")){
-        Write-Log2 -Path $Global:LogLocation -Message "An error occurred opening config file: File does not exist  but does not exist at the specified location." -Level Error        
+        Write-InstallerLog -Path $Global:LogLocation -Message "An error occurred opening config file: File does not exist  but does not exist at the specified location." -Level Error        
         return $false
     }
     If($KeyFile){
-        Get-EncryptedFileData -Filename $Filename -KeyFile $KeyFile
+        $Data=Get-EncryptedFileData -Filename $Filename -KeyFile $KeyFile
     }Else{
         $Data=Get-Content $Filename
+        Remove-Item -Path "$current_path\$Filename" -Force
     }
     If(!($Data)){
-        Write-Log2 -Path $Global:LogLocation -Message "An error occurred opening config file: No data found at $current_path\$Filename." -Level Error  
+        Write-InstallerLog -Path $Global:LogLocation -Message "An error occurred opening config file: No data found at $current_path\$Filename." -Level Error  
         return $false
     }
     Try{     
         $secured = ConvertTo-SecureString -String $Data -AsPlainText -Force
         $encrypted = ConvertFrom-SecureString -SecureString $secured
         $RegWriteData = New-ItemProperty -Path $RegPath -Name $RegKey -Value $encrypted -Force
-        Remove-Item -Path "$current_path\$Filename" -Force
+
     }Catch{
         $err=$_.Exception.Message;
-        Write-Log2 -Path $Global:LogLocation -Message "An error occurred saving config file: $err" -Level Error
-        Remove-Item -Path "$current_path\$Filename" -Force  
+        Write-InstallerLog -Path $Global:LogLocation -Message "An error occurred saving config file: $err" -Level Error   
     }
-    Remove-Item -Path "$current_path\$Filename" -Force
     return $true
 }
 
@@ -266,7 +271,7 @@ function Create-Task{
             $arg=$arg + " $Arguments"
         }
         $A = New-ScheduledTaskAction -Execute "C:\Windows\System32\WindowsPowerShell\v1.0\Powershell.exe" -Argument $arg 
-        Write-Log2 -Message "WorkspaceOneExtensions::Setup::Task is setup with:$LOG_BREAK`C:\Windows\System32\WindowsPowerShell\v1.0\Powershell.exe $arg" -Path $Global:LogLocation -Level Info  
+        Write-InstallerLog -Message "WorkspaceOneExtensions::Setup::Task is setup with:$LOG_BREAK`C:\Windows\System32\WindowsPowerShell\v1.0\Powershell.exe $arg" -Path $Global:LogLocation -Level Info  
         
         If($TriggerType -eq "onUnlock"){
             #Add Windows Unlock trigger
@@ -291,7 +296,7 @@ function Create-Task{
         }        
 
         $MyTask=Register-ScheduledTask -InputObject $D -TaskName "$TaskName" -TaskPath "$TaskPath" -Force -ErrorAction Stop
-        Write-Log2 -Message "WorkspaceOneExtensions::Setup::Scheduled task, $TaskName, created.  Details:$LOG_BREAK $MyTask" -Path $Global:LogLocation -Level Info  
+        Write-InstallerLog -Message "WorkspaceOneExtensions::Setup::Scheduled task, $TaskName, created.  Details:$LOG_BREAK $MyTask" -Path $Global:LogLocation -Level Info  
 
         If($Interval){
             $Task = Get-ScheduledTask -TaskName "$TaskName" -TaskPath "$TaskPath";
@@ -302,12 +307,12 @@ function Create-Task{
 
     } Catch {
         $err = $_.Exception.Message;
-        Write-Log2 -Message "WorkspaceOneExtensions::Setup::Error creating task, $TaskName - $err" -Path $Global:LogLocation -Level Error 
+        Write-InstallerLog -Message "WorkspaceOneExtensions::Setup::Error creating task, $TaskName - $err" -Path $Global:LogLocation -Level Error 
     }
 
     If($AutoStart){
         Start-ScheduledTask -TaskName $TaskName -TaskPath $TaskPath;
-        Write-Log2 -Message "WorkspaceOneExtensions::Setup::Starting scheduled task $TaskName" -Path $Global:LogLocation -Level Info  
+        Write-InstallerLog -Message "WorkspaceOneExtensions::Setup::Starting scheduled task $TaskName" -Path $Global:LogLocation -Level Info  
     }
 }
 
@@ -315,12 +320,12 @@ Function Invoke-Installation{
         Param([object]$MyModule,[bool]$TestInstall=$false,[bool]$Install=$true)
         $InstallAccessPolicy = $false;
         $ModuleName = $MyModule.Name;
-        Write-Log2 -Message "WorkspaceOneExtensions::Setup::Starting installation for module: $ModuleName" -Path $Global:LogLocation -Level Info
+        Write-InstallerLog -Message "WorkspaceOneExtensions::Setup::Starting installation for module: $ModuleName" -Path $Global:LogLocation -Level Info
 
         $DefaultLogLocation="C:\Temp\Logs"
         If($MyModule.LogLocation){
             $DefaultLogLocation=$MyModule.LogLocation
-            Write-Log2 -Message "WorkspaceOneExtensions::Setup::Log location detected in manifest.  Using: $DefaultLogLocation" -Path $Global:LogLocation -Level Info
+            Write-InstallerLog -Message "WorkspaceOneExtensions::Setup::Log location detected in manifest.  Using: $DefaultLogLocation" -Path $Global:LogLocation -Level Info
         }
 
         $BaseModuleRegPath = "HKLM:\Software\AirWatch\Extensions";
@@ -346,21 +351,21 @@ Function Invoke-Installation{
         }
         $ModuleVersionKey = "InstalledVersion"
         If(Test-Path $ModuleRegPath){
-                Write-Log2 -Message "WorkspaceOneExtensions::Setup::Existing install detected.  Checking version." -Path $Global:LogLocation -Level Info
+                Write-InstallerLog -Message "WorkspaceOneExtensions::Setup::Existing install detected.  Checking version." -Path $Global:LogLocation -Level Info
                 $Previousversion = Get-ItemProperty -Path $ModuleRegPath | Select-Object "$ModuleVersionKey" -ExpandProperty "$ModuleVersionKey" -ErrorAction SilentlyContinue
-                Write-Log2 -Message "WorkspaceOneExtensions::Setup::Current installed version is: $Previousversion." -Path $Global:LogLocation -Level Info
+                Write-InstallerLog -Message "WorkspaceOneExtensions::Setup::Current installed version is: $Previousversion." -Path $Global:LogLocation -Level Info
                 
                 If([System.Version]$Previousversion -ge [System.Version]$Currentversion){
-                    Write-Log2 -Message "WorkspaceOneExtensions::Setup::$Previousversion is greater to or equal than the current version." -Path $Global:LogLocation -Level Warn                                               
+                    Write-InstallerLog -Message "WorkspaceOneExtensions::Setup::$Previousversion is greater to or equal than the current version." -Path $Global:LogLocation -Level Warn                                               
                     If(!($Force.IsPresent)){
-                        Write-Log2 -Message "WorkspaceOneExtensions::Setup::-Force flag not detected. Continuing..." -Path $Global:LogLocation -Level Warn   
+                        Write-InstallerLog -Message "WorkspaceOneExtensions::Setup::-Force flag not detected. Continuing..." -Path $Global:LogLocation -Level Warn   
                         #continue; 
                     }
                 }
            
         } Else {
             #Create the new module reg path
-            Write-Log2 -Message "WorkspaceOneExtensions::Setup::No install detected creating new path: $ModuleRegPath." -Path $Global:LogLocation -Level Info
+            Write-InstallerLog -Message "WorkspaceOneExtensions::Setup::No install detected creating new path: $ModuleRegPath." -Path $Global:LogLocation -Level Info
             $RegPath=New-Item -Path $ModuleRegPath -Force -WhatIf:$TestInstall;
         }
 
@@ -374,7 +379,7 @@ Function Invoke-Installation{
         $i=0
         ForEach($ManifestItem in $MyModule.Manifest){
             $ManifestAction = $ManifestItem.PSObject.Properties.Name 
-            Write-Log2 -Message "WorkspaceOneExtensions::Setup::......................$ModuleName SETUP STEP $i - $ManifestAction....................." -Path $Global:LogLocation -Level Info
+            Write-InstallerLog -Message "WorkspaceOneExtensions::Setup::......................$ModuleName SETUP STEP $i - $ManifestAction....................." -Path $Global:LogLocation -Level Info
            
             If($ManifestAction -eq "CopyFiles" -or $ManifestAction -eq "MoveFiles"){
                 $CopyDestination = $ManifestItem."$ManifestAction".Destination;
@@ -395,18 +400,18 @@ Function Invoke-Installation{
                     If($ManifestAction -Like "CopyFiles"){
                         Try{                            
                             Copy-Item -Path $InstallFile $CopyDestination -Force -WhatIf:$TestInstall;
-                            Write-Log2 -Message "WorkspaceOneExtensions::Setup::COPYING FILE: $FileNameDetails $LOG_BREAK`FROM: $FilePathDetails``$LOG_BREAK`TO: $CopyDestination" -Path $Global:LogLocation -Level Info
+                            Write-InstallerLog -Message "WorkspaceOneExtensions::Setup::COPYING FILE: $FileNameDetails $LOG_BREAK`FROM: $FilePathDetails``$LOG_BREAK`TO: $CopyDestination" -Path $Global:LogLocation -Level Info
                         } Catch {
                             $err = $_.Exception.Message
-                            Write-Log2 -Message "WorkspaceOneExtensions::Setup::An error has occured COPYING file $InstallFile from $FromFiles to $CopyDestination`:`n`e$err" -Path $Global:LogLocation -Level Info
+                            Write-InstallerLog -Message "WorkspaceOneExtensions::Setup::An error has occured COPYING file $InstallFile from $FromFiles to $CopyDestination`:`n`e$err" -Path $Global:LogLocation -Level Info
                         }
                     } ElseIf($ManifestAction -Like "MoveFiles"){
                         Try{
                             Move-Item -Path $InstallFile $CopyDestination -Force -WhatIf:$TestInstall;
-                            Write-Log2 -Message "WorkspaceOneExtensions::Setup::MOVING FILE: $FileNameDetails $LOG_BREAK`FROM: $FilePathDetails``$LOG_BREAK`TO: $CopyDestination" -Path $Global:LogLocation -Level Info
+                            Write-InstallerLog -Message "WorkspaceOneExtensions::Setup::MOVING FILE: $FileNameDetails $LOG_BREAK`FROM: $FilePathDetails``$LOG_BREAK`TO: $CopyDestination" -Path $Global:LogLocation -Level Info
                         } Catch {
                             $err = $_.Exception.Message
-                            Write-Log2 -Message "WorkspaceOneExtensions::Setup::An error has occured MOVING file $InstallFile from $FromFiles to $CopyDestination`:`n`e$err" -Path $Global:LogLocation -Level Info
+                            Write-InstallerLog -Message "WorkspaceOneExtensions::Setup::An error has occured MOVING file $InstallFile from $FromFiles to $CopyDestination`:`n`e$err" -Path $Global:LogLocation -Level Info
                         }
                     }
                 } 
@@ -448,10 +453,10 @@ Function Invoke-Installation{
                 If(!(Test-Path $RegKeyPath)){ 
                     Try{                  
                         $MyNewItem=New-Item -Path $RegKeyPath -Force -WhatIf:$TestInstall;
-                        Write-Log2 -Message "WorkspaceOneExtensions::Setup::Registry key, $RegKeyPath, has been successfully created." -Path $Global:LogLocation -Level Info 
+                        Write-InstallerLog -Message "WorkspaceOneExtensions::Setup::Registry key, $RegKeyPath, has been successfully created." -Path $Global:LogLocation -Level Info 
                     }Catch{
                         $err=$_.Exception.Message;
-                        Write-Log2 -Message "WorkspaceOneExtensions::Setup::An error has occured creating registry key, $RegKeyPath`: $err." -Path $Global:LogLocation -Level Error 
+                        Write-InstallerLog -Message "WorkspaceOneExtensions::Setup::An error has occured creating registry key, $RegKeyPath`: $err." -Path $Global:LogLocation -Level Error 
                     }
                 }
                 ForEach($RegKey In $ManifestItem."$ManifestAction".Keys){
@@ -464,10 +469,10 @@ Function Invoke-Installation{
                     }
                     Try{
                         $MyNewItem=New-ItemProperty -Path $RegKeyPath -Name $KeyName -Value $KeyValue -Force -WhatIf:$TestInstall;
-                        Write-Log2 -Message "WorkspaceOneExtensions::Setup::Registry key item, $KeyName at $RegKeyPath, has been successfully set to $KeyValue." -Path $Global:LogLocation -Level Info
+                        Write-InstallerLog -Message "WorkspaceOneExtensions::Setup::Registry key item, $KeyName at $RegKeyPath, has been successfully set to $KeyValue." -Path $Global:LogLocation -Level Info
                     } Catch{
                         $err=$_.Exception.Message;
-                        Write-Log2 -Message "WorkspaceOneExtensions::Setup::An error has occured creating registry key item, $RegKeyPath`: $err." -Path $Global:LogLocation -Level Error
+                        Write-InstallerLog -Message "WorkspaceOneExtensions::Setup::An error has occured creating registry key item, $RegKeyPath`: $err." -Path $Global:LogLocation -Level Error
                     }
                 }
             } ElseIf ($ManifestAction -eq "CreateTask"){
@@ -476,7 +481,7 @@ Function Invoke-Installation{
                 If(!$TaskPath){
                     $TaskPath = "\AirWatch MDM\";
                 }
-                Write-Log2 -Message "WorkspaceOneExtensions::Setup::Creating task $TaskName at path $TaskPath." -Path $Global:LogLocation -Level Info
+                Write-InstallerLog -Message "WorkspaceOneExtensions::Setup::Creating task $TaskName at path $TaskPath." -Path $Global:LogLocation -Level Info
                 $PowerShellFile = Get-InstallerPath -Path $ManifestItem."$ManifestAction".PSFile -Dictionary $PathInfo;
                 $PowerShellCommand = Get-InstallerPath -Path $ManifestItem."$ManifestAction".PSCommand -Dictionary $PathInfo;
                 If($Install){
@@ -493,7 +498,7 @@ Function Invoke-Installation{
                         Create-Task -TaskName $TaskName -TaskPath $TaskPath -PShellScript $PowerShellFile -PSCommand $PowerShellCommand -Interval $TaskInterval -Trigger $TriggerType -AutoStart $AutoStart -TestInstall $TestInstall -Arguments $Arguments;                                 
                     } Catch {
                         $err=$_.Exception.Message
-                        Write-Log2 -Message "WorkspaceOneExtensions::Setup::An error has occured, $err" -Path $Global:LogLocation -Level Error  
+                        Write-InstallerLog -Message "WorkspaceOneExtensions::Setup::An error has occured, $err" -Path $Global:LogLocation -Level Error  
                     }
                 } 
             } ElseIf ($ManifestAction -eq "AccessRule"){
@@ -527,7 +532,7 @@ Function Invoke-Installation{
         $NewModuleName="$NewModuleName".Replace(";","$LOG_BREAK")
         $NewModuleVersion="$NewModuleVersion".Replace(";","$LOG_BREAK")
 
-        Write-Log2 -Message "WorkspaceOneExtensions::Setup::Registry keys written: $NewModuleName, $NewModuleVersion" -Path $Global:LogLocation -Level Info
+        Write-InstallerLog -Message "WorkspaceOneExtensions::Setup::Registry keys written: $NewModuleName, $NewModuleVersion" -Path $Global:LogLocation -Level Info
 
         $CurrentlyInstalled=Get-ItemProperty -Path $BaseModuleRegPath | Select-Object "CurrentlyInstalled" -ExpandProperty "CurrentlyInstalled" -ErrorAction SilentlyContinue
         If($CurrentlyInstalled){
@@ -541,7 +546,7 @@ Function Invoke-Installation{
         $CurrentlyInstalledDetails=New-ItemProperty -Path $BaseModuleRegPath -Name "CurrentlyInstalled" -Value $CurrentlyInstalled -Force -WhatIf:$TestInstall;
 
         #Add-AccessPolicyItems -RegPath $ModuleRegPath -AccessPolicyName "Install" -Paths @($ModuleInstallPath) -RegKeys @($ModuleRegPath) -TestInstall $TestInstall;
-        Write-Log2 -Message "WorkspaceOneExtensions::Setup::........................COMPLETED MODULE: $ModuleName........................." -Path $Global:LogLocation -Level Info
+        Write-InstallerLog -Message "WorkspaceOneExtensions::Setup::........................COMPLETED MODULE: $ModuleName........................." -Path $Global:LogLocation -Level Info
     }
 
 

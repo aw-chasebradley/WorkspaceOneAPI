@@ -17,6 +17,14 @@ ForEach($ModuleName in $Modules.Keys){
     }
     $ImportedModule=Get-Module -Name $ModuleName -ErrorAction SilentlyContinue
 
+    If(($ImportedModule | Measure).Count -gt 1){
+        $ImportedModule = $ImportedModule | Where-Object Path -Like "$ModulePath.psm1"
+    }
+
+    If(!$ImportedModule){
+        Throw "Invalid module"
+    }
+
     $ModuleBuildNum=0
     $ModuleBuildMinor="00"
 
@@ -39,7 +47,7 @@ ForEach($ModuleName in $Modules.Keys){
             $CreateNewManifest=$true
         }ElseIf(([int]::Parse($ModuleLastUpdate) -gt [int]::Parse("$ModuleBuildVersion$ModuleBuildMinor"))){
             $ModuleBuildVersion=$File.LastWriteTime.Date.ToString("yyMM")
-            $ModuleMinorVersion=$File.LastWriteTime.Date.ToString("dd")
+            $ModuleBuildMinor=$File.LastWriteTime.Date.ToString("dd")
             $CreateNewManifest=$true
         }
     } Else{
@@ -61,7 +69,7 @@ ForEach($ModuleName in $Modules.Keys){
             Path              = "$ModulePath.psd1"
             RootModule        = "$ModuleName.psm1" 
             Author            = 'Chase Bradley'
-            ModuleVersion     = "$ModuleBuildVersion.$ModuleMinorVersion.$ModuleBuildNum"
+            ModuleVersion     = "$ModuleBuildVersion.$ModuleBuildMinor.$ModuleBuildNum"
         }
         <#Switch($ModuleName){
         }#>
