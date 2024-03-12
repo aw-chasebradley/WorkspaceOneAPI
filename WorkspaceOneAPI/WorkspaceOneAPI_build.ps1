@@ -4,14 +4,18 @@ $Modules=@{"WorkspaceOneApi"="$PSScriptRoot\WorkspaceOneAPI";
             "Wso.Cache"="$PSScriptRoot\Lib\Wso.Cache";
             "Wso.CommonLib"="$PSScriptRoot\Lib\Wso.CommonLib";
             "Wso.Logging"="$PSScriptRoot\Lib\Wso.Logging"
+            "Wso.WebLib"="$PSScriptRoot\Lib\Wso.WebLib"
 }
 
 ForEach($ModuleName in $Modules.Keys){
     $ModulePath=$Modules[$ModuleName]
 
     Unblock-File "$ModulePath.psm1"
+    
     #Import-Module $ModulePath -ErrorAction Continue -PassThru -Force
-    $ImportModuleCheck=Import-Module "$ModulePath.psd1" -ErrorAction Continue -PassThru -Force
+    If(Test-Path -Path "$ModulePath.psd1"){
+        $ImportModuleCheck=Import-Module "$ModulePath.psd1" -ErrorAction Continue -PassThru -Force
+    }
     If(!$ImportModuleCheck){
         $ImportModuleCheck=Import-Module "$ModulePath.psm1" -ErrorAction Stop -PassThru -Force
     }

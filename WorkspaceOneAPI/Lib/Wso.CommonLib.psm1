@@ -11,7 +11,7 @@ if(!($current_path)){
 
 $RootPath=Split-Path $current_path -Parent
 
-$CommonFiles=@("Wso.Logging.psm1","Wso.Cache.psm1", "Wso.Windows.Users.psm1")
+$CommonFiles=@("Wso.Logging.psm1","Wso.Cache.psm1", "Wso.Windows.Users.psm1","Wso.WebLib.psm1")
 $ExportedFunctions=@()
 $ExportedAlias=@()
 #Import Libraries and Functions
@@ -52,7 +52,7 @@ Function New-DynamicObject{
                 $Value.GetType().Name -eq "Hashtable"){
             $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $Value;
         }
-        elseif($Value){
+        elseif($Value -ne $null){
             $Object | Add-Member -MemberType NoteProperty -Name $Name -Value $Value;
         }
     }
@@ -65,6 +65,16 @@ Function New-DynamicObject{
 }
 
 Set-Alias -Name NewObj -Value New-DynamicObject
+
+function ConvertTo-Hashtable{
+    param([PSCustomObject]$Object)
+    $Attributes=($Object | Get-Member -MemberType NoteProperty | Select Name).Name
+    $HashTable=@{}
+    foreach($Property in $Attributes){
+        $HashTable.Add($Property, $Object."$Property") | Out-Null
+    }
+    return $HashTable
+}
 
 <#
 .AUTHOR
@@ -85,7 +95,6 @@ function Get-DeviceSerial{
         If(!([string]::IsNullOrEmpty($SerialNumReg))){
             return $SerialNumReg
         }
-
 
         $serialSearch = wmic bios get serialnumber;
         $myserialnumber = $serialSearch[2];
@@ -151,6 +160,7 @@ function Get-CurrentLoggedonUser{
     return $usernameLookup;
 }
 
+
 <#
 .SYNOPSIS
 This function encodes the credentials for use with REST APIs
@@ -189,7 +199,7 @@ function New-CustomException{
     return [WorkspaceOneCustomException]::new($Message, $InnerExceptionMessage)
 }
 
-$ExportedFunctions+=@("New-DynamicObject";"Get-DeviceSerial";"Get-CurrentLoggedOnUser","New-BasicAuthCredentials","New-CustomException")
+$ExportedFunctions+=@("New-DynamicObject","Get-DeviceSerial","Get-CurrentLoggedOnUser","New-BasicAuthCredentials","New-CustomException","ConvertTo-Hashtable")
 $ExportedAlias+=@("NewObj")
 
 Export-ModuleMember -Function $ExportedFunctions -Alias $ExportedAlias

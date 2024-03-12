@@ -1,0 +1,31 @@
+﻿$ApiSettings=@{'Server'="https://serveraddress";
+    'AuthType'='Basic';
+    'Username'='username';
+    'Password'='password';
+    'ApiKey'='ApiKey';
+    'SslThumbprint'='E92F8B14BBA08C834B8A70896A81D50B0E5EAB96';
+    'OrganizationGroupId'=571
+    }
+
+$ApiSettings=@{'Server'="https://thd-workspaceoneproxy-test.azurewebsites.net";
+            'AuthType'='OauthCertificate';
+            'CertificateSearch'=@{
+                "Issuer"="";
+            };
+            'OauthConfig'=@{
+                'identityUri'="";
+                'grant_type'='';
+                'client_id'='';
+                'client_secret'='';
+                'scope'='';
+            };
+            'ApiKey'='ApiKey';
+            'SslThumbprint'='E92F8B14BBA08C834B8A70896A81D50B0E5EAB96';
+            'OrganizationGroupId'=570
+            }
+
+Write-WorkspaceOneAPILocalConfig -ApiSettings $ApiSettings
+
+Get-CurrentWsoDeviceByAltId
+
+return

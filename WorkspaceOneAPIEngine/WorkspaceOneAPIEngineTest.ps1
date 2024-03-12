@@ -61,4 +61,4 @@ $ExportedAliai += $WSOModule.ExportedAliases.Keys
 $ExportedFunctions=$ExportedFunctions | Get-Unique
 $ExportedAliai=$ExportedAliai | Get-Unique
 
-Export-ModuleMember -Function $ExportedFunctions -Alias $ExportedAliai
+#Export-ModuleMember -Function $ExportedFunctions -Alias $ExportedAliai

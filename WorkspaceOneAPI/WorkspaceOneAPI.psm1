@@ -14,7 +14,7 @@ If(!($current_path)){ Throw "An Error has occurred, unabled to determine current
 
 #Module metadata info
 $ModuleName="WorkspaceOneAPI"
-$BuildDate="231016"
+$BuildDate="240214"
 $BuildVersion=0
 $CurrentVersion="$BuildDate.$BuildVersion"
 
@@ -61,15 +61,18 @@ If(!($TLSVersion)){
     }
 }
 
-
 <#
 .SYNOPSIS
-    WorkspaceOneApiConfig Object for creating a new API config
+    WorkspaceOneApiConfigTest Object for creating a new API config
 .DESCRIPTION
     Currently only used to store and format settings and is not intended for external use
 #>
 class WorkspaceOneApiConfig{ 
+    $AuthType
+    $CertificateSearch
     $BasicAuthCreds
+    $OauthConfig
+
     $Server
     $ApiKey
     $SslThumbprint
@@ -77,12 +80,44 @@ class WorkspaceOneApiConfig{
     WorkspaceOneApiConfig([Hashtable]$ApiSettings){
         $ProcInfo=GetLogPos -FileName $Script:Filename -ClassName ($this.GetType().Name) -FunctionName "Initialization"        
 
-        #Handles how auth is setup and automatically encodes Username and Password for basic auth
-        If(($ApiSettings.ContainsKey('Username')) -and $ApiSettings.ContainsKey('Password')){
-            $this.BasicAuthCreds=New-BasicAuthCredentials -UserName $ApiSettings['Username'] -Password $ApiSettings['Password']
-        } ElseIf($ApiSettings['BasicAuth']) {
-            $this.BasicAuthCreds=$ApiSettings['BasicAuth']
+        If(!$ApiSettings.ContainsKey('AuthType')){
+            $this.AuthType="Basic"
+        }ElseIf($ApiSettings['AuthType'] -in @('Basic','Certificate','Oauth','OauthCertificate')){
+            $This.AuthType=$ApiSettings['AuthType']
+        }Else{
+            Throw "An error has occured configuring authentication for WorkspaceOneAPI"
         }
+
+        If($ApiSettings.ContainsKey('Oauth')){
+            $this.OauthConfig=$ApiSettings['OauthConfig']
+        }
+
+        If($this.AuthType -eq "Basic"){
+            #Handles how auth is setup and automatically encodes Username and Password for basic auth
+            If(($ApiSettings.ContainsKey('Username')) -and $ApiSettings.ContainsKey('Password')){
+                $this.BasicAuthCreds=New-BasicAuthCredentials -UserName $ApiSettings['Username'] -Password $ApiSettings['Password']
+            } ElseIf($ApiSettings['BasicAuth']) {
+                $this.BasicAuthCreds=$ApiSettings['BasicAuth']
+            }
+        } Else{ 
+
+            If($this.AuthType -in @("Certificate","OauthCertificate")){
+                If($ApiSettings.ContainsKey('CertificateSearch')){
+                    $this.CertificateSearch=$ApiSettings['CertificateSearch']
+                }Else{
+                    Throw "An error has occured.  No certificate was specified."
+                }
+            }  
+        
+            If($this.AuthType -in @("Oauth","OauthCertificate")){
+                If($ApiSettings.ContainsKey('OauthConfig')){
+                    $this.OauthConfig=$ApiSettings['OauthConfig']
+                }Else{
+                    Throw "An error has occured.  No certificate was specified."
+                }
+            }
+        }
+
 
         #
         $this.Server=$ApiSettings['Server']
@@ -94,7 +129,6 @@ class WorkspaceOneApiConfig{
         $this.OrganizationGroupId=$ApiSettings['OrganizationGroupId']   
     }
 }
-
 
 
 <#START WorkspaceOneAPISession class definition
@@ -110,7 +144,6 @@ class WorkspaceOneApiSession{
     $Log="$Script:WSOLogLocation"
     $Filename="$Script:Filename"
     $InstallPath = "HKLM:\Software\AIRWATCH\Extensions\WorkspaceOneAPI"; 
-
 
     WorkspaceOneApiSession([Hashtable]$ApiSettings){
         $ProcInfo=GetLogPos -FileName $this.Filename -ClassName ($this.GetType().Name) -FunctionName "Initialization"
@@ -140,13 +173,9 @@ class WorkspaceOneApiSession{
         return [WorkspaceOneApiSession]::new($ApiSettings);
     }
 
-    <#
-    .SYNOPSIS
-    This function creates a web request
-    .DESCRIPTION
-    #> 
-    [PSCustomObject]InvokeSecureWebRequest([string]$Endpoint, [string]$Method="GET", $ApiVersion=1, $Data=""){
-        $ProcInfo=GetLogPos -FileName $Script:Filename -ClassName ($this.GetType().Name) -FunctionName "InvokeSecureWebRequest"
+    [PSCustomObject]GetResponse([string]$Endpoint, $ApiVersion=1, $Method,  $Data=""){
+        $ProcInfo=GetLogPos -FileName $Script:FileName -ClassName ($this.GetType().Name) -FunctionName "GetResponse";
+        Write-Log2 -Path $this.Log -ProcessInfo $ProcInfo -Message "BEGIN REQUEST Intializing" -Level Debug
 
         If($Endpoint -match "^api\/.*"){
             $Endpoint = "$($this.Config.Server)/$Endpoint"
@@ -158,95 +187,28 @@ class WorkspaceOneApiSession{
             Throw "Error, endpoint not formatted correctly.  Expecting 'api/module/endpoint'"
         }
 
-        Write-Log2 -Path $this.Log -ProcessInfo $ProcInfo -Message "BEGIN REQUEST '$Method $Endpoint'"  -Level Info
-        $Content=$null
-        Try
-        {
-            
-            If([string]::IsNullOrEmpty($this.Config.SslThumbprint)){
-                $err="SSL thumbprint is not set.  SSL thumbprint is required to ensure API requests are secure to Workspace One server."
-                throw (New-CustomException "An SSL/TLS error has occured", $err);
-            } 
-            # Create web request with headers and credentials
-            $WebRequest = [System.Net.WebRequest]::Create("$Endpoint")
-            $WebRequest.Method = $Method;
-            $WebRequest.Headers.Add("aw-tenant-code",$this.Config.ApiKey);
-            $WebRequest.Headers.Add("Authorization",$this.Config.BasicAuthCreds);
-            $WebRequest.Accept = "application/json;version=$ApiVersion";
-            $WebRequest.ContentType = "application/json;version=$ApiVersion";  
-            
-            #Data stream for POST/PUT data
-            If($Data){ 
-                $ByteArray = [System.Text.Encoding]::UTF8.GetBytes($Data);
-                $WebRequest.ContentLength = $ByteArray.Length;  
-                $Stream = $WebRequest.GetRequestStream();
-                Try{              
-                    $Stream.Write($ByteArray, 0, $ByteArray.Length);     
-                } Catch {
-                    $err = $_.Exception.Message;
-                    Write-Log2 -Path $this.Log -ProcessInfo $ProcInfo -Message "ERROR DATA encoding data,`r`n`t`t$err"  -Level Error -FromClass  
-                } Finally{
-                    $Stream.Close();
-                }
-            } Else {
-                $WebRequest.ContentLength = 0;
+        $Accept="application/json;version=$ApiVersion"
+        $ContentType="application/json;version=$ApiVersion"
+        $Headers=@{"aw-tenant-code"=$this.Config.ApiKey}
+
+        $ClientCertificate="";
+        If($this.Config.AuthType -eq "Basic"){
+            $Headers.Add("Authorization",$this.Config.BasicAuthCreds);
+        }Else{
+            If($this.Config.AuthType -in @("Certificate","OauthCertificate")){
+                $ClientCertificate=Get-ClientAuthCert -CertificateFilters $this.Config.CertificateSearch
             }
 
-            #Get current SSL thumbprint
-            $SSLThumbprint = $this.Config.SSLThumbprint
-            # Set the callback to check for null certificate and thumbprint matching.
-            $WebRequest.ServerCertificateValidationCallback = {
-                $ThumbPrint = $SSLThumbprint;
-                $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]$args[1]
-                If ($certificate -eq $null)
-                {
-                    return $false
+            If($this.Config.AuthType -in @("Oauth", "OauthCertificate")){
+                $OauthSettings=$this.Config.OauthConfig;
+                $OauthToken = Invoke-OauthTokenRequest -IdentityUri $OauthSettings.identityUri -GrantType $OauthSettings.grant_type -ClientId $OauthSettings.client_id -ClientSecret $OauthSettings.client_secret -Scope $OauthSettings.scope
+                If($OauthToken){
+                     $Headers.Add("Authorization",$OauthToken);
                 }
-                #This line enables SSL pinning
-                If (($certificate.Thumbprint -eq $ThumbPrint) -and ($certificate.SubjectName.Name -ne $certificate.IssuerName.Name))
-                {
-                    return $true
-                }
-                $err="SSL thumbprint $Thumbprint does not match server, $($certificate.Thumbprint) or certificate is self signed."
-                Write-Log2 -Path $this.Log -ProcessInfo $ProcInfo -Message "ERROR SSL/TLS Security $err" -Level Error -FromClass
-                return $false
-            }      
-            # Get response stream
-            Write-Log2 -Path $this.Log -ProcessInfo $ProcInfo -Message "PROCESS REQUEST Requesting response from server."  -Level Debug  
-            $Response = $webrequest.GetResponse();
-            $ResponseStream = $webrequest.GetResponse().GetResponseStream()
-            # Create a stream reader and read the stream returning the string value.
-            $StreamReader = New-Object System.IO.StreamReader -ArgumentList $ResponseStream
-            Try{
-                $Content = $StreamReader.ReadToEnd();
-            } Catch {
-                $err = "Unable to read response, $($_.Exception.Message)";
-                Write-Log2 -Path $this.Log -ProcessInfo $ProcInfo -Message "ERROR RESPONSE $err" -Level Error -FromClass
-            } Finally{
-                $StreamReader.Close();
             }
-
-            $CustomWebResponse = $Response | Select-Object Headers, ContentLength, ContentType, CharacterSet, LastModified, ResponseUri,
-                @{N='StatusCode';E={$_.StatusCode.value__}},@{N='Content';E={$Content}},StatusDescription
-            
-            Write-Log2 -Path $this.Log -ProcessInfo $ProcInfo -Message "END REQUEST Request completed."  -Level Info 
-            return $CustomWebResponse;
         }
-        Catch
-        {
-            $err=$_.Exception.InnerException.Message;
-            $StatusCode = $_.Exception.InnerException.Response.StatusCode.value__;
-            $StatusDescription = $_.Exception.InnerException.Response.Status;
-            If(!($StatusCode)){
-                $StatusCode = 999;
-            } 
-            return NewObj @{"StatusCode"=$StatusCode;"Content"=$err}
-        }
-    }
 
-    [PSCustomObject]GetResponse([string]$Endpoint, $ApiVersion=1, $Method,  $Data=""){
-        $ProcInfo=GetLogPos -FileName $Script:FileName -ClassName ($this.GetType().Name) -FunctionName "GetResponse";
-        Write-Log2 -Path $this.Log -ProcessInfo $ProcInfo -Message "BEGIN REQUEST Intializing" -Level Debug
+        $SslThumbprint=$this.Config.SslThumbprint;
 
         #Performs the GetDeviceId function if a reference to the current device is made in the body or the endpoint
         $CurrentDeviceLookup=$false;
@@ -277,7 +239,10 @@ class WorkspaceOneApiSession{
         }
 
         #Main web request
-        $WebRequest = $this.InvokeSecureWebRequest($Endpoint, $Method, $ApiVersion, $Data)
+        #$WebRequest = $this.InvokeSecureWebRequest($Endpoint, $Method, $ApiVersion, $Data)
+
+        $WebRequest = Invoke-SecureWebRequestEx -Endpoint $Endpoint -Method $Method -Accept $Accept -ContentType $ContentType -Headers $Headers -Data $Data -ClientCertificate $ClientCertificate -SslThumbprint $SslThumbprint
+            
         Write-Log2 -Path $this.Log -ProcessInfo $ProcInfo -Message "END REQUEST Response status code '$($WebRequest.StatusCode)'" -Level Info
         If($WebRequest.StatusCode -lt 300){                         
             Write-Log2 -Path $this.Log -ProcessInfo $ProcInfo -Message "END REQUEST Response data: '$($WebRequest.Content)'" -Level Debug  
@@ -285,7 +250,6 @@ class WorkspaceOneApiSession{
             If($WebRequest.Content){
                 $ReturnObj = ConvertFrom-Json $WebRequest.Content; 
             }
-
 
             If((($ReturnObj.total -ne $null) -and ($ReturnObj.total -gt $ReturnObj.page_size))){              
                 $SmartObjectId=($ReturnObj | Get-Member -MemberType NoteProperty | Where Name -notin @("page", "page_size", "total","links") | Select Name).Name
@@ -296,7 +260,7 @@ class WorkspaceOneApiSession{
                     Write-Log2 -Path $this.Log -ProcessInfo $ProcInfo -Message "Start Paging proccess" -Level Debug             
                     $Divider="?"
                     If($Endpoint -match "([^?]*)\?") { $Divider="&" }
-                    $WebRequestPaged=$this.InvokeSecureWebRequest("$Endpoint$Divider`page=$($CurrentPage + 1)", $Method, $ApiVersion, $Data)
+                    $WebRequestPaged=Invoke-SecureWebRequestEx -Endpoint "$Endpoint$Divider`page=$($CurrentPage + 1)" -Accept $Accept -ContentType $ContentType -Headers $Headers -Data $Data -ClientCertificate $ClientCertificate -SslThumbprint $SslThumbprint
                     $ReturnObjPaged = ConvertFrom-Json $WebRequestPaged.Content; 
                     $ReturnObj."$SmartObjectId" += @($ReturnObjPaged."$SmartObjectId") 
                     $CurrentPageCount=($ReturnObjPaged.PageSize-($ReturnObj."$SmartObjectId" | Measure).Count)  
@@ -316,7 +280,7 @@ class WorkspaceOneApiSession{
                     While($CurrentPage -lt $TotalPages){
                         $Divider="?"
                         If($Endpoint -match "([^?]*)\?") { $Divider="&" }
-                        $WebRequestPaged=$this.InvokeSecureWebRequest("$Endpoint$Divider`page=$($CurrentPage)", $Method, $ApiVersion, $Data)
+                        $WebRequestPaged=Invoke-SecureWebRequestEx -Endpoint "$Endpoint$Divider`page=$($CurrentPage + 1)" -Accept $Accept -ContentType $ContentType -Headers $Headers -Data $Data -ClientCertificate $ClientCertificate -SslThumbprint $SslThumbprint
                         $ReturnObjPaged = ConvertFrom-Json $WebRequestPaged.Content;
                         $PagedObject.Add($CurrentPage, $ReturnObjPaged)
                         $CurrentPage++;
@@ -434,13 +398,44 @@ function Write-WorkspaceOneAPILocalConfig{
     #Format SSL thumbprint
     $ApiSettings['SslThumbprint'] = $ApiSettings['SslThumbprint'].Replace(" ","").ToLower()
 
-    #If username and password were specified, 
-    If(!$ApiSettings.ContainsKey('BasicAuth')){
-        $ApiSettings.Add('BasicAuth',(New-BasicAuthCredentials -UserName $ApiSettings['Username'] -Password $ApiSettings['Password']))
-        $ApiSettings.Remove('Username')
-        $ApiSettings.Remove('Password')
+    #If no auth type is provided use Basic Auth
+    If(!$ApiSettings.ContainsKey('AuthType')){
+        $ApiSettings.Add('AuthType','Basic')
+    }ElseIf($ApiSettings['AuthType'] -in @("Basic","Oauth","Certificate","OauthCertificate")){
+        $AuthType=$ApiSettings['AuthType']
     }
     
+    #Certificate validation
+    If($AuthType -in @("Certificate","OauthCertificate")){
+        If(!$ApiSettings.ContainsKey('CertificateSearch')){
+            throw "An error has occured.  Certificate authentication was not configured correctly"
+        } 
+    }
+
+    <#
+    'identityUri' 'grant_type' 'client_id' 'client_secret' 'scope'
+    #>
+    If($ApiSettings['AuthType'] -in @("Oauth","OauthCertificate")){
+        If(!$ApiSettings.ContainsKey('OauthConfig')){
+            throw "An error has occured.  Oauth Authentication was not configured correctly"
+        }Else{
+            If(!($ApiSettings['OAuthConfig'].ContainsKey("identityUri") -and 
+               $ApiSettings['OAuthConfig'].ContainsKey("grant_type") -and
+               $ApiSettings['OAuthConfig'].ContainsKey("client_secret") -and
+               $ApiSettings['OAuthConfig'].ContainsKey("client_id"))){
+                throw "An error has occured.  Oauth Authentication was not configured correctly"
+            }
+        }
+    }
+
+    If($ApiSettings['AuthType'] -eq 'Basic'){
+        If(!$ApiSettings.ContainsKey('BasicAuth')){
+            $ApiSettings.Add('BasicAuth',(New-BasicAuthCredentials -UserName $ApiSettings['Username'] -Password $ApiSettings['Password']))
+            $ApiSettings.Remove('Username')
+            $ApiSettings.Remove('Password')
+        }
+    }
+
     $LocalConfigResult=Set-LocalCacheEntry -Module "WorkspaceOneAPI" -EntryName "Config$ConfigId" -Data $ApiSettings -EncryptData -Force -ExpirationHours 0
     return $LocalConfigResult
 }
@@ -454,15 +449,33 @@ function Read-WorkspaceOneAPILocalConfig{
         Throw "Unable to retrieve Local Workspace One API config."
     }
 
-    $ApiSettings=@{'Server'=$ApiObj.Server;
-            'BasicAuth'=$ApiObj.BasicAuth;
+    $ApiSettings=@{'AuthType'=$ApiObj.AuthType;
+            'Server'=$ApiObj.Server;
             'ApiKey'=$ApiObj.ApiKey;
             'SslThumbprint'=$ApiObj.SslThumbprint;
             'OrganizationGroupId'=$ApiObj.OrganizationGroupId
         }
 
+    If($ApiSettings.AuthType -in @('Basic')){
+        $ApiSettings.Add("BasicAuth",$ApiObj.BasicAuth) | Out-Null
+    }
+    If($ApiSettings.AuthType -like '*Certificate*'){
+        If($ApiObj.CertificateSearch){
+           $ApiSettingsHash = ConvertTo-Hashtable -Object $ApiObj.CertificateSearch 
+           $ApiSettings.Add("CertificateSearch",$ApiSettingsHash) | Out-Null
+        }
+    }
+    If($ApiSettings.AuthType -like '*Oauth*'){
+        If($ApiObj.OauthConfig){
+            $ApiSettingsOauthHash = ConvertTo-Hashtable -Object $ApiObj.OauthConfig 
+            $ApiSettings.Add("OauthConfig",$ApiSettingsOauthHash) | Out-Null
+        }
+    }
+    
+
     return $ApiSettings
 }
+
 
 
 <#
@@ -548,7 +561,7 @@ Function Invoke-WorkspaceOneAPICommand{
 }
 
 #General WorkspaceOneAPI Commands
-$ExportedFunctions = @("New-WorkspaceOneAPISession","Invoke-WorkspaceOneAPICommand","Get-CurrentWsoDeviceByAltId","Get-WorkspaceOneAPILookupValue","Get-OrganizationGroup")
+$ExportedFunctions = @("New-WorkspaceOneAPISession","Invoke-WorkspaceOneAPICommand","Get-ClientAuthCertTest","Invoke-SecureWebRequestEx","Get-CurrentWsoDeviceByAltId","Get-WorkspaceOneAPILookupValue","Get-OrganizationGroup")
 
 #Local config command
 $ExportedFunctions += @("Write-WorkspaceOneAPILocalConfig","Test-WorkspaceOneAPILocalConfig")

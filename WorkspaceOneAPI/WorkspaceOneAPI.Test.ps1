@@ -3,12 +3,12 @@
 param([hashtable]$ApiSettings,[string]$TestDeviceSerial,$TestSection=@(),[switch]$Log)
 $Module="WorkspaceOneAPI"
 #
-$ApiSettings=@{'Server'="https://as1506.awmdm.com";
-            'Username'='bradley';
-            'Password'='Ch4s3br!';
-            'ApiKey'='Lx2LGBsTWs5HbZ1+Icq0qV/ubU5Zw9OsvlPfh7QQ0eE=';
-            'SslThumbprint'='8F DD 6E 38 5B 37 6A 09 A6 3F F7 E7 A7 BF BC E9 F1 BA D5 21';
-            'OrganizationGroupId'=10098
+$ApiSettings=@{'Server'="https://asXXXX.awmdm.com";
+            'Username'='username';
+            'Password'='password';
+            'ApiKey'='APIKey';
+            'SslThumbprint'='SSL Thumbprint';
+            'OrganizationGroupId'=571
             }
 
 $TestDeviceSerial="VMHfEGr9MFSv"

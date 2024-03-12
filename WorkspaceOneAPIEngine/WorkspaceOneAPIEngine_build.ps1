@@ -16,6 +16,13 @@ If(!($ModuleResult)){
 }
 
 $ImportedModule=Get-Module -Name $ModuleName -ErrorAction SilentlyContinue
+
+If(($ImportedModule | Measure).Count -gt 0){
+    $ImportedModule = ($ImportedModule | Sort-Object Version -Descending)[0]
+}
+
+$ImportedFunctions=Import-Module "$ModulePath.psm1" -ErrorAction SilentlyContinue -PassThru -Force
+
 $ModuleBuildNum=0
 $ModuleVersion=$ImportedModule.Version
 If($ModuleVersion){
@@ -44,8 +51,8 @@ $manifest = @{
     Path              = '.\WorkspaceOneAPIEngine.psd1'
     RootModule        = 'WorkspaceOneAPIEngine.psm1' 
     Author            = 'Chase Bradley'
-    FunctionsToExport = @($ImportedModule.ExportedFunctions.Keys)
-    AliasesToExport     = @($ImportedModule.ExportedAliases.Keys)
+    FunctionsToExport = @($ImportedFunctions.ExportedFunctions.Keys)
+    AliasesToExport     = @($ImportedFunctions.ExportedAliases.Keys)
     ModuleVersion     = "$ModuleBuildVersion.$ModuleBuildNum"
 }
 Remove-Item $PSScriptRoot\WorkspaceOneApiEngine.psd1 -ErrorAction SilentlyContinue -Force | Out-Null

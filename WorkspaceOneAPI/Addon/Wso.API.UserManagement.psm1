@@ -49,7 +49,7 @@ $change_og_endpoint = "/api/mdm/devices/{DeviceId}/commands/changeorganizationgr
 
 Function Get-WsoOrganizationGroupByGroupId{
     [Alias("Get-WsoOrganizationGroup")]
-    param([string]$GroupId, [hastable]$ApiSettings)
+    param([string]$GroupId, [hashtable]$ApiSettings)
     $ProcInfo=GetLogPos -FileName $CurrentModuleFileName -FunctionName $MyInvocation.MyCommand 
     $OgSearchEndpoint = "/api/system/groups/search?groupid=$NewGroupId";
     $OgSearchResult = Invoke-WorkspaceOneAPICommand -Endpoint $OGSearchEndpoint -Method "GET" -ApiVersion 2 -UseLocal:(!($ApiSettings))
@@ -91,7 +91,7 @@ Function Get-WSOCurrentUserId{
     Begin{
         $ProcInfo=GetLogPos -FileName $CurrentModuleFileName -FunctionName $MyInvocation.MyCommand 
     } Process{
-        $MultiUserSecurityRestrictionsReg=Get-ItemProperty -Path $ModuleInstallPath -ErrorAction SilentlyContinue | Select-Object -Property "SecurityRestrictions" -ExpandProperty "SecurityRestrictions" -ErrorAction SilentlyContinue
+        $MultiUserSecurityRestrictionsReg=Get-ItemProperty -Path $InstallPath -ErrorAction SilentlyContinue | Select-Object -Property "SecurityRestrictions" -ExpandProperty "SecurityRestrictions" -ErrorAction SilentlyContinue
         If(!($MultiUserSecurityRestrictionsReg)){ Throw (New-CustomException "Error, unable to load multi-user device restriction settings") }
         $MultiUserSecurityRestrictions=ConvertFrom-Json $MultiUserSecurityRestrictionsReg
 
@@ -149,3 +149,6 @@ Function Set-WSODeviceUser{
         }
     }
 }
+
+$ExportedFunctions = @("Get-WsoOrganizationGroupByGroupId", "Set-WsoDeviceOrganizationGroup", "Get-WsoOrganizationGroupByGroupId", "Get-WSOCurrentUserId", "Set-WSODeviceUser")
+Export-ModuleMember -Function $ExportedFunctions 
